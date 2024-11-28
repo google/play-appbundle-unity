@@ -15,6 +15,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Xml.Linq;
 using Google.Android.AppBundle.Editor.Internal.AndroidManifest;
@@ -740,10 +741,9 @@ namespace Google.Android.AppBundle.Editor.Internal.BuildTools
                 return;
             }
 
-            var symbolsFilePath = Path.Combine(_workingDirectoryPath, GetSymbolsFileName(AndroidPlayerFilePrefix));
-            if (!File.Exists(symbolsFilePath))
+            var symbolsFilePath = FindSymbolsFile(_workingDirectoryPath);
+            if (symbolsFilePath == null)
             {
-                // The file won't exist for Mono builds or if EditorUserBuildSettings.androidCreateSymbolsZip is false.
                 return;
             }
 
@@ -754,8 +754,22 @@ namespace Google.Android.AppBundle.Editor.Internal.BuildTools
                 // If the symbols file already exists, we need to delete it first.
                 File.Delete(outputSymbolsFilePath);
             }
-
             File.Move(symbolsFilePath, outputSymbolsFilePath);
+        }
+
+        private string FindSymbolsFile(string path)
+        {
+            var pattern = string.Format("{0}-{1}-v{2}*.symbols.zip", AndroidPlayerFilePrefix, _versionName, _versionCode);
+            var matchingFiles = Directory.EnumerateFiles(path, pattern).ToList();
+            if (matchingFiles.Count == 0)
+            {
+                // The file won't exist for Mono builds or if EditorUserBuildSettings.androidCreateSymbolsZip is false.
+                return null;
+            }
+            if (matchingFiles.Count > 1) {
+                throw new Exception("Expected to find only one file matching " + pattern + ", but found " + matchingFiles.Count);
+            }
+            return matchingFiles[0];
         }
 
         private string GetSymbolsFileName(string prefix)
