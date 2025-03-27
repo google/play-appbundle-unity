@@ -55,6 +55,7 @@ namespace Google.Android.AppBundle.Editor.Internal.BuildTools
         private const string ManifestDirectoryName = "manifest";
         private const string RequiredDirectoryName = "assets/bin/Data/Managed";
         private const string ResourceTableFileName = "resources.pb";
+        private const string DeviceTargetingConfigFilePrefix = "com.android.tools.build.bundletool/DeviceGroupConfig.json:";
         private const float ProgressCreateBaseModule = 0.3f;
         private const float ProgressProcessModules = 0.5f;
         private const float ProgressRunBundletool = 0.7f;
@@ -205,6 +206,10 @@ namespace Google.Android.AppBundle.Editor.Internal.BuildTools
             if (error != null)
             {
                 return error;
+            }
+            if (options.AssetPackConfig.PathToDeviceTargetingConfigFile != "") {
+                string deviceTargetingConfigFile = DeviceTargetingConfigFilePrefix + options.AssetPackConfig.PathToDeviceTargetingConfigFile;
+                bundleMetadata.Add(deviceTargetingConfigFile);
             }
 
             error = CreateBundle(moduleDirectoryList, options, bundleMetadata);
@@ -556,6 +561,7 @@ namespace Google.Android.AppBundle.Editor.Internal.BuildTools
                 defaultDeviceTier =
                     DeviceTierTargetingTools.GetBundleToolDeviceTierFormatName(
                         options.AssetPackConfig.DefaultDeviceTier),
+                defaultDeviceGroup = options.AssetPackConfig.DefaultDeviceGroup,
                 minSdkVersion = _minSdkVersion,
                 compressionOptions = options.CompressionOptions ?? new CompressionOptions(),
                 containsInstallTimeAssetPack = options.AssetPackConfig.SplitBaseModuleAssets
@@ -571,6 +577,8 @@ namespace Google.Android.AppBundle.Editor.Internal.BuildTools
                 configParams.enableTcfTargeting |= assetPack.CompressionFormatToAssetPackDirectoryPath != null;
                 configParams.enableDeviceTierTargeting |= assetPack.DeviceTierToAssetBundleFilePath != null;
                 configParams.enableDeviceTierTargeting |= assetPack.DeviceTierToAssetPackDirectoryPath != null;
+                configParams.enableDeviceGroupTargeting |= assetPack.DeviceGroupToAssetBundleFilePath != null;
+                configParams.enableDeviceGroupTargeting |= assetPack.DeviceGroupToAssetPackDirectoryPath != null;
                 configParams.containsInstallTimeAssetPack |=
                     assetPack.DeliveryMode == AssetPackDeliveryMode.InstallTime;
             }
@@ -672,6 +680,17 @@ namespace Google.Android.AppBundle.Editor.Internal.BuildTools
                     File.Copy(deviceTierAndFilePath.Value, Path.Combine(outputDirectory.FullName, assetPackName));
                 }
             }
+            else if (assetPack.DeviceGroupToAssetBundleFilePath != null)
+            {
+                // Copy the AssetBundle files into the module's "assets" folder, inside an "assetpack#group_xxx" folder.
+                foreach (var deviceGroupAndFilePath in assetPack.DeviceGroupToAssetBundleFilePath)
+                {
+                    var targetedAssetsFolderName =
+                        AssetPackFolder + DeviceGroupTargetingTools.GetTargetingSuffix(deviceGroupAndFilePath.Key);
+                    var outputDirectory = destinationAssetsDirectory.CreateSubdirectory(targetedAssetsFolderName);
+                    File.Copy(deviceGroupAndFilePath.Value, Path.Combine(outputDirectory.FullName, assetPackName));
+                }
+            }
             else if (assetPack.AssetPackDirectoryPath != null)
             {
                 var sourceAssetsDirectory = new DirectoryInfo(assetPack.AssetPackDirectoryPath);
@@ -719,6 +738,25 @@ namespace Google.Android.AppBundle.Editor.Internal.BuildTools
 
                     var targetedAssetsFolderName =
                         AssetPackFolder + DeviceTierTargetingTools.GetTargetingSuffix(deviceTierAndDirectoryPath.Key);
+                    var outputDirectory = destinationAssetsDirectory.CreateSubdirectory(targetedAssetsFolderName);
+                    CopyFilesRecursively(sourceAssetsDirectory, outputDirectory);
+                }
+            }
+            else if (assetPack.DeviceGroupToAssetPackDirectoryPath != null)
+            {
+                // Copy asset pack files into the module's "assets" folder, inside an "assetpack#group_xxx" folder.
+                foreach (var deviceGroupAndDirectoryPath in assetPack.DeviceGroupToAssetPackDirectoryPath)
+                {
+                    var sourceAssetsDirectory = new DirectoryInfo(deviceGroupAndDirectoryPath.Value);
+                    if (!sourceAssetsDirectory.Exists)
+                    {
+                        // TODO: check this earlier.
+                        return DisplayBuildError("Missing directory for " + assetPackName,
+                            sourceAssetsDirectory.FullName);
+                    }
+
+                    var targetedAssetsFolderName =
+                        AssetPackFolder + DeviceGroupTargetingTools.GetTargetingSuffix(deviceGroupAndDirectoryPath.Key);
                     var outputDirectory = destinationAssetsDirectory.CreateSubdirectory(targetedAssetsFolderName);
                     CopyFilesRecursively(sourceAssetsDirectory, outputDirectory);
                 }

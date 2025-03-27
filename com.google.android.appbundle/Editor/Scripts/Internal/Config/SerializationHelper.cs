@@ -59,6 +59,8 @@ namespace Google.Android.AppBundle.Editor.Internal.Config
                 SplitBaseModuleAssets = assetPackConfig.SplitBaseModuleAssets,
                 DefaultTextureCompressionFormat = assetPackConfig.DefaultTextureCompressionFormat,
                 DefaultDeviceTier = assetPackConfig.DefaultDeviceTier,
+                DefaultDeviceGroup = assetPackConfig.DefaultDeviceGroup,
+                PathToDeviceTargetingConfigFile = assetPackConfig.PathToDeviceTargetingConfigFile,
             };
 
             foreach (var pair in assetPackConfig.AssetPacks)
@@ -75,6 +77,8 @@ namespace Google.Android.AppBundle.Editor.Internal.Config
                         CopyDictionary(assetPack.CompressionFormatToAssetPackDirectoryPath),
                     DeviceTierToAssetBundleFilePath = assetPack.DeviceTierToAssetBundleFilePath,
                     DeviceTierToAssetPackDirectoryPath = assetPack.DeviceTierToAssetPackDirectoryPath,
+                    DeviceGroupToAssetBundleFilePath = assetPack.DeviceGroupToAssetBundleFilePath,
+                    DeviceGroupToAssetPackDirectoryPath = assetPack.DeviceGroupToAssetPackDirectoryPath,
                 };
                 copy.AssetPacks.Add(pair.Key, assetPackCopy);
             }
@@ -91,6 +95,9 @@ namespace Google.Android.AppBundle.Editor.Internal.Config
             };
 
             config.DefaultDeviceTier = assetPackConfig.DefaultDeviceTier;
+
+            config.defaultDeviceGroup = assetPackConfig.DefaultDeviceGroup;
+            config.pathToDeviceTargetingConfigFile = assetPackConfig.PathToDeviceTargetingConfigFile;
 
 
             foreach (var assetPackEntry in assetPackConfig.AssetPacks)
@@ -148,6 +155,23 @@ namespace Google.Android.AppBundle.Editor.Internal.Config
                     config.assetBundles.Add(assetBundle);
                 }
 
+                if (assetPack.DeviceGroupToAssetBundleFilePath != null)
+                {
+                    var assetBundle = new SerializableMultiTargetingAssetBundle
+                    {
+                        name = name, DeliveryMode = assetPack.DeliveryMode
+                    };
+                    foreach (var deviceGroupEntry in assetPack.DeviceGroupToAssetBundleFilePath)
+                    {
+                        assetBundle.assetBundles.Add(new SerializableAssetBundle
+                        {
+                            path = deviceGroupEntry.Value,
+                            deviceGroup = deviceGroupEntry.Key
+                        });
+                    }
+
+                    config.assetBundles.Add(assetBundle);
+                }
 
                 if (assetPack.AssetPackDirectoryPath != null)
                 {
@@ -193,6 +217,22 @@ namespace Google.Android.AppBundle.Editor.Internal.Config
                     config.targetedAssetPacks.Add(multiTargetingAssetPack);
                 }
 
+                if (assetPack.DeviceGroupToAssetPackDirectoryPath != null)
+                {
+                    var multiTargetingAssetPack = new SerializableMultiTargetingAssetPack
+                    {
+                        name = name, DeliveryMode = assetPack.DeliveryMode
+                    };
+                    foreach (var deviceGroupEntry in assetPack.DeviceGroupToAssetPackDirectoryPath)
+                    {
+                        multiTargetingAssetPack.paths.Add(new SerializableTargetedDirectoryPath
+                        {
+                            path = deviceGroupEntry.Value,
+                            deviceGroup = deviceGroupEntry.Key
+                        });
+                    }
+                }
+
             }
 
             return config;
@@ -211,6 +251,9 @@ namespace Google.Android.AppBundle.Editor.Internal.Config
                 SplitBaseModuleAssets = config.splitBaseModuleAssets
             };
             assetPackConfig.DefaultDeviceTier = config.DefaultDeviceTier;
+
+            assetPackConfig.DefaultDeviceGroup = config.defaultDeviceGroup;
+            assetPackConfig.PathToDeviceTargetingConfigFile = config.pathToDeviceTargetingConfigFile;
 
 
             foreach (var multiTargetingAssetBundle in config.assetBundles)
@@ -254,6 +297,15 @@ namespace Google.Android.AppBundle.Editor.Internal.Config
                     assetPackConfig.AddAssetBundles(dictionaryDeviceTier, multiTargetingAssetBundle.DeliveryMode);
                 }
 
+                var dictionaryDeviceGroup =
+                    assetBundles.Any(assetBundle => assetBundle.deviceGroup != null)
+                        ? assetBundles
+                            .ToDictionary(item => item.deviceGroup, item => item.path)
+                        : new Dictionary<string, string>();
+                if (dictionaryDeviceGroup.Count != 0)
+                {
+                    assetPackConfig.AddAssetBundles(dictionaryDeviceGroup, multiTargetingAssetBundle.DeliveryMode);
+                }
             }
 
             foreach (var pack in config.assetPacks)
@@ -287,6 +339,16 @@ namespace Google.Android.AppBundle.Editor.Internal.Config
                         pack.DeliveryMode);
                 }
 
+                var deviceGroupToAssetPackDirectoryPath =
+                    pack.paths.Any(path => path.deviceGroup != null)
+                        ? pack.paths
+                            .ToDictionary(item => item.deviceGroup, item => item.path)
+                        : new Dictionary<string, string>();
+                if (deviceGroupToAssetPackDirectoryPath.Count != 0)
+                {
+                    assetPackConfig.AddAssetsFolders(pack.name, deviceGroupToAssetPackDirectoryPath,
+                        pack.DeliveryMode);
+                }
             }
 
             return assetPackConfig;

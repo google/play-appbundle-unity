@@ -34,6 +34,10 @@ namespace Google.Android.AppBundle.Editor.Internal.Config
 
         public int defaultDeviceTier = 0;
 
+        public string defaultDeviceGroup = "other";
+
+        public string pathToDeviceTargetingConfigFile = "";
+
 
         public TextureCompressionFormat DefaultTextureCompressionFormat
         {

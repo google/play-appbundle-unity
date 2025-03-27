@@ -56,6 +56,18 @@ namespace Google.Android.AppBundle.Editor.Internal.BuildTools
             /// </summary>
             public string defaultDeviceTier = "0";
 
+            /// <summary>
+            /// If true, enables targeting of module contents by device groups.
+            /// </summary>
+            public bool enableDeviceGroupTargeting;
+
+            /// <summary>
+            /// When targeting by device group, specifies the default device group that will be used to generate
+            /// standalone APKs for Android pre-Lollipop devices that don't support split APKs.
+            /// If not specified, it defaults to "other".
+            /// </summary>
+            public string defaultDeviceGroup = "other";
+
 
             /// <summary>
             /// Whether or not this bundle contains an install-time asset pack.
@@ -166,6 +178,20 @@ namespace Google.Android.AppBundle.Editor.Internal.BuildTools
                     {
                         enabled = true,
                         defaultSuffix = configParams.defaultDeviceTier
+                    }
+                });
+            }
+
+            if (configParams.enableDeviceGroupTargeting)
+            {
+                dimensions.Add(new BundletoolConfig.SplitDimension
+                {
+                    value = BundletoolConfig.DeviceGroup,
+                    negate = false,
+                    suffixStripping =
+                    {
+                        enabled = true,
+                        defaultSuffix = configParams.defaultDeviceGroup
                     }
                 });
             }

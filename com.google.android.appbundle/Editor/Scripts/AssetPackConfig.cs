@@ -68,6 +68,20 @@ namespace Google.Android.AppBundle.Editor
         /// </summary>
         public DeviceTier DefaultDeviceTier = 0;
 
+        /// <summary>
+        /// When asset packs for multiple device groups are present, this specifies the group used
+        /// when building standalone APKs for Android pre-Lollipop devices.
+        /// </summary>
+        public string DefaultDeviceGroup = "other";
+
+        /// <summary>
+        /// Specifies the path to the device targeting config file.
+        /// Should only be set if you are using device targeting.
+        /// The file should be a JSON file containing a list of device groups.
+        /// It can either be absolute or relative.
+        /// </summary>
+        public string PathToDeviceTargetingConfigFile = "";
+
 
         /// <summary>
         /// Returns true if this configuration includes at least 1 asset pack that may be packaged in an AAB.
@@ -248,6 +262,59 @@ namespace Google.Android.AppBundle.Editor
                 DeliveryMode = deliveryMode,
                 DeviceTierToAssetBundleFilePath =
                     new Dictionary<DeviceTier, string>(deviceTierToAssetBundleFilePath)
+            };
+        }
+
+        /// <summary>
+        /// Package the specified raw assets in the specified folders, keyed by device group,
+        /// in an <see cref="AssetPack"/> with the specified delivery mode.
+        /// When using Play Asset Delivery APIs, only the AssetBundle for the device's group will be delivered.
+        /// </summary>
+        public void AddAssetsFolders(
+            string assetPackName,
+            IDictionary<string, string> deviceGroupToAssetPackDirectoryPath,
+            AssetPackDeliveryMode deliveryMode)
+        {
+            if (deviceGroupToAssetPackDirectoryPath.Count == 0)
+            {
+                throw new ArgumentException("Dictionary should contain at least one path");
+            }
+
+            CheckAssetPackName(assetPackName);
+            AssetPacks[assetPackName] = new AssetPack
+            {
+                DeliveryMode = deliveryMode,
+                DeviceGroupToAssetPackDirectoryPath =
+                    new Dictionary<string, string>(deviceGroupToAssetPackDirectoryPath)
+            };
+        }
+
+        /// <summary>
+        /// Package the specified AssetBundle files, which vary only by device group, in an
+        /// <see cref="AssetPack"/> with the specified delivery mode.
+        /// When using Play Asset Delivery APIs, only the AssetBundle for the device's group will be delivered.
+        /// </summary>
+        public void AddAssetBundles(
+            IDictionary<string, string> deviceGroupToAssetBundleFilePath,
+            AssetPackDeliveryMode deliveryMode)
+        {
+            if (deviceGroupToAssetBundleFilePath.Count == 0)
+            {
+                throw new ArgumentException("Dictionary should contain at least one AssetBundle");
+                ;
+            }
+
+            var assetPackName = GetAssetPackName(deviceGroupToAssetBundleFilePath.Values.First());
+            if (deviceGroupToAssetBundleFilePath.Any(kvp => assetPackName != GetAssetPackName(kvp.Value)))
+            {
+                throw new ArgumentException("All AssetBundles in the Dictionary must have the same name");
+            }
+
+            AssetPacks[assetPackName] = new AssetPack
+            {
+                DeliveryMode = deliveryMode,
+                DeviceGroupToAssetBundleFilePath =
+                    new Dictionary<string, string>(deviceGroupToAssetBundleFilePath)
             };
         }
 

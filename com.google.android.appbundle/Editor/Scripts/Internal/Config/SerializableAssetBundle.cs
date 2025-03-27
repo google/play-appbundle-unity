@@ -25,6 +25,8 @@ namespace Google.Android.AppBundle.Editor.Internal.Config
 
         public string deviceTier;
 
+        public string deviceGroup;
+
 
         public TextureCompressionFormat TextureCompressionFormat
         {

@@ -2,6 +2,7 @@
 
 ## [1.10.0] - 2025-03-20
 ### New Features
+- Added support for device group targeting of assets
 - Updated bundletool-all.jar from 1.14.0 to 1.18.1
 
 ## [1.9.0] - 2023-03-10

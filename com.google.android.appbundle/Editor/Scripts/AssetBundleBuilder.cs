@@ -225,6 +225,105 @@ namespace Google.Android.AppBundle.Editor
                 outputPath, assetBundleOptions, deviceTierToBuilds, assetBundleNames);
         }
 
+        /// <summary>
+        /// Run one or more AssetBundle builds for the specified device groups.
+        /// Notes about the <see cref="outputPath"/> parameter:
+        /// - If a relative path is provided, the file paths in the returned AssetPackConfig will be relative paths.
+        /// - If an absolute path is provided, the file paths in the returned object will be absolute paths.
+        /// - AssetBundle builds for device groups will be created in siblings of this directory. For
+        ///   example, for outputDirectory "a/b/c" and device group X, there will be a directory "a/b/c#group_X".
+        /// - If allowClearDirectory is false, this directory and any sibling directories must be empty or not exist,
+        ///   otherwise an exception is thrown.
+        /// </summary>
+        /// <param name="outputPath">The output directory for AssetBundles. See other notes above.</param>
+        /// <param name="deliveryMode">A delivery mode to apply to every asset pack in the generated config.</param>
+        /// <param name="deviceGroupToBuilds">A dictionary from Device Group to asset bundle builds. All device groups
+        /// should contain the same asset bundle names.</param>
+        /// <param name="defaultDeviceGroup">
+        /// Default device group to be used for standalone APKs. Set to null if not specified.</param>
+        /// <param name="assetBundleOptions">Options to pass to <see cref="BuildPipeline"/>.</param>
+        /// <param name="allowClearDirectory">Allows this method to clear the contents of the output directory.</param>
+        /// <returns>An <see cref="AssetPackConfig"/> containing file paths to all generated AssetBundles.</returns>
+        public static AssetPackConfig BuildAssetBundlesDeviceGroup(
+            string outputPath,
+            AssetPackDeliveryMode deliveryMode,
+            Dictionary<string, AssetBundleBuild[]> deviceGroupToBuilds,
+            string defaultDeviceGroup = "other",
+            BuildAssetBundleOptions assetBundleOptions = BuildAssetBundleOptions.UncompressedAssetBundle,
+            bool allowClearDirectory = false)
+        {
+            var nameToDeviceGroupToPath = BuildAssetBundlesDeviceGroup(outputPath, deviceGroupToBuilds,
+                assetBundleOptions, allowClearDirectory);
+            var assetPackConfig = new AssetPackConfig();
+            foreach (var deviceGroupToPath in nameToDeviceGroupToPath.Values)
+            {
+                assetPackConfig.AddAssetBundles(deviceGroupToPath, deliveryMode);
+            }
+
+            assetPackConfig.DefaultDeviceGroup = defaultDeviceGroup;
+            return assetPackConfig;
+        }
+
+        /// <summary>
+        /// Run one or more AssetBundle builds for each device group.
+        /// </summary>
+        /// <param name="outputPath">The output directory for base AssetBundles. See the other method for notes.</param>
+        /// <param name="deviceGroupToBuilds">A dictionary from Device Group to asset bundle builds. All device groups
+        /// should contains the same asset bundle names.</param>
+        /// <param name="assetBundleOptions">Options to pass to <see cref="BuildPipeline"/>.</param>
+        /// <param name="allowClearDirectory">Allows this method to clear the contents of the output directory.</param>
+        /// <returns>A dictionary from AssetBundle name to device group to file outputPath.</returns>
+        public static Dictionary<string, Dictionary<string, string>> BuildAssetBundlesDeviceGroup(
+            string outputPath,
+            Dictionary<string, AssetBundleBuild[]> deviceGroupToBuilds,
+            BuildAssetBundleOptions assetBundleOptions,
+            bool allowClearDirectory)
+        {
+            if (deviceGroupToBuilds == null || deviceGroupToBuilds.Count == 0)
+            {
+                throw new ArgumentException("deviceGroupToBuilds parameter cannot be null or empty");
+            }
+
+            if (deviceGroupToBuilds.Values.Any(builds => builds == null || builds.Length == 0))
+            {
+                throw new ArgumentException("AssetBundleBuilds value cannot be null or empty");
+            }
+
+            var assetBundleNames = deviceGroupToBuilds.Values.First().Select(build => build.assetBundleName).ToList();
+
+            if (deviceGroupToBuilds.Values.Any(builds =>
+                    !(builds.Length == assetBundleNames.Count() &&
+                      builds.Select(build => build.assetBundleName).Except(assetBundleNames).ToList().Count == 0)))
+            {
+                throw new ArgumentException("AssetBundleBuild names cannot differ across device groups.");
+            }
+
+            foreach (var assetBundleName in assetBundleNames)
+            {
+                if (!AndroidAppBundle.IsValidModuleName(assetBundleName))
+                {
+                    throw new ArgumentException("Invalid AssetBundle name: " + assetBundleName);
+                }
+            }
+
+            if (string.IsNullOrEmpty(outputPath))
+            {
+                throw new ArgumentNullException("outputPath");
+            }
+
+            CheckDirectory(outputPath, allowClearDirectory);
+
+            var groups = new HashSet<string>(deviceGroupToBuilds.Keys);
+            var paths = groups.Select(group => outputPath + DeviceGroupTargetingTools.GetTargetingSuffix(group));
+            foreach (var path in paths)
+            {
+                CheckDirectory(path, allowClearDirectory);
+            }
+
+            return BuildAssetBundlesDeviceGroupInternal(
+                outputPath, assetBundleOptions, deviceGroupToBuilds, assetBundleNames);
+        }
+
 
         // The internal method assumes all parameter preconditions have already been checked.
         private static Dictionary<string, Dictionary<TextureCompressionFormat, string>> BuildAssetBundlesInternal(
@@ -297,6 +396,44 @@ namespace Google.Android.AppBundle.Editor
             {
                 var filePath = Path.Combine(outputPath, entry.Key);
                 entry.Value[deviceTier] = filePath;
+                if (!File.Exists(filePath))
+                {
+                    throw new InvalidOperationException(string.Format("Missing AssetBundle file: " + filePath));
+                }
+            }
+        }
+
+        private static Dictionary<string, Dictionary<string, string>> BuildAssetBundlesDeviceGroupInternal(
+            string outputPath, BuildAssetBundleOptions assetBundleOptions,
+            Dictionary<string, AssetBundleBuild[]> deviceGroupToBuilds, IEnumerable<string> assetBundleNames)
+        {
+            // Use a dictionary to capture the generated AssetBundles' file names.
+            var nameToDeviceGroupToPath = assetBundleNames.ToDictionary(
+                bundleName => bundleName, _ => new Dictionary<string, string>());
+            foreach (var deviceGroup in deviceGroupToBuilds.Keys)
+            {
+                var groupBuilds = deviceGroupToBuilds[deviceGroup];
+                // Build AssetBundles in the the base format's directory.
+                BuildAssetBundles(outputPath, groupBuilds, assetBundleOptions);
+
+                // Then move the files to a new directory with the device group suffix.
+                var outputPathWithSuffix = outputPath + DeviceGroupTargetingTools.GetTargetingSuffix(deviceGroup);
+                Directory.Move(outputPath, outputPathWithSuffix);
+
+                UpdateDictionaryDeviceGroup(nameToDeviceGroupToPath, outputPathWithSuffix, deviceGroup);
+            }
+
+            return nameToDeviceGroupToPath;
+        }
+
+        private static void UpdateDictionaryDeviceGroup(
+            Dictionary<string, Dictionary<string, string>> nameToDeviceGroupToPath,
+            string outputPath, string deviceGroup)
+        {
+            foreach (var entry in nameToDeviceGroupToPath)
+            {
+                var filePath = Path.Combine(outputPath, entry.Key);
+                entry.Value[deviceGroup] = filePath;
                 if (!File.Exists(filePath))
                 {
                     throw new InvalidOperationException(string.Format("Missing AssetBundle file: " + filePath));
